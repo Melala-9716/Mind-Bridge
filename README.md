@@ -76,7 +76,7 @@ User sees updated request status
 
 🚀 Getting Started
 1. Clone the repository
-git clone https://github.com/your-username/mind-bridge.git
+git clone https://github.com/Melala-9716/mind-bridge.git
 cd mind-bridge
 2. Install dependencies
 npm install
