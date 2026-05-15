@@ -1,4 +1,4 @@
-# v0-mindbridge-ethiopia-app
+# V0-mindbridge-ethiopia-app
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [v0](https://v0.app).
 
