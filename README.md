@@ -1,5 +1,9 @@
 🧠 Mind Bridge
 A mental wellness platform bridging the gap between individuals seeking psychological support and professionals ready to help.
+
+## 🌐 Live Demo
+
+[View Mind Bridge Live](https://agent-6a073d45ddaaa81977e3db--nimble-flan-049f06.netlify.app/)
 🚀 Badges
 
 ![Next.js](https://img.shields.io/badge/Next.js-black?style=flat-square&logo=next.js)
