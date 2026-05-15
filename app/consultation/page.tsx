@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState, useEffect, useRef, useCallback } from 'react'
+import { Suspense, useState, useEffect, useRef, useCallback, type KeyboardEvent } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { format } from 'date-fns'
 import { Navigation } from '@/components/navigation'
@@ -179,6 +179,10 @@ function mapTypeQueryToFormValue(typeRaw: string | null): string {
   return t.replace(/\s+/g, '-')
 }
 
+function normalizeLanguageTag(raw: string): string {
+  return raw.trim().replace(/\s+/g, ' ')
+}
+
 function ConsultationPageContent() {
   const t = siteCopy
   const searchParams = useSearchParams()
@@ -250,8 +254,48 @@ function ConsultationPageContent() {
   const [professionalsLoading, setProfessionalsLoading] = useState(true)
 
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false)
-  const [customLanguage, setCustomLanguage] = useState('')
+  const [otherLanguageOpen, setOtherLanguageOpen] = useState(false)
+  const [languageDraft, setLanguageDraft] = useState('')
   const languageOptions = ['English', 'Amharic', 'Afaan Oromo', 'Somali', 'Tigrinya', 'Gurage', 'Sidama', 'Hadiyya', 'Gamo', 'Wolaita', 'Kaffa', 'Berta', 'Nuer', 'Maale', 'Daasanach']
+
+  const addPreferredLanguage = useCallback((raw: string) => {
+    const value = normalizeLanguageTag(raw)
+    if (!value) return
+    const key = value.toLowerCase()
+    setFormData((prev) => {
+      if (prev.preferredLanguages.some((l) => l.toLowerCase() === key)) return prev
+      return { ...prev, preferredLanguages: [...prev.preferredLanguages, value] }
+    })
+  }, [])
+
+  const removePreferredLanguage = useCallback((lang: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      preferredLanguages: prev.preferredLanguages.filter((l) => l !== lang),
+    }))
+  }, [])
+
+  const commitLanguageDraft = useCallback(() => {
+    const value = normalizeLanguageTag(languageDraft)
+    if (!value) return
+    addPreferredLanguage(value)
+    setLanguageDraft('')
+  }, [languageDraft, addPreferredLanguage])
+
+  const handleLanguageDraftKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        commitLanguageDraft()
+        return
+      }
+      if (e.key === 'Backspace' && !languageDraft && formData.preferredLanguages.length > 0) {
+        const last = formData.preferredLanguages[formData.preferredLanguages.length - 1]
+        removePreferredLanguage(last)
+      }
+    },
+    [languageDraft, formData.preferredLanguages, commitLanguageDraft, removePreferredLanguage],
+  )
 
   // Pre-select professional from URL (Book Session on /professionals). Runs again when the
   // directory loads so `professionalId` can resolve to the canonical `full_name` used in form state.
@@ -432,11 +476,19 @@ function ConsultationPageContent() {
       preferredLanguages: [],
     })
     setError('')
+    setLanguageDraft('')
+    setOtherLanguageOpen(false)
+    setShowLanguageDropdown(false)
   }
 
   const handleSubmit = (e: any) => {
     e.preventDefault()
     setError('')
+
+    if (languageDraft.trim()) {
+      addPreferredLanguage(languageDraft)
+      setLanguageDraft('')
+    }
     
     // Validate that at least email or phone is provided
     if (!formData.email && !formData.phone) {
@@ -829,7 +881,45 @@ function ConsultationPageContent() {
                 {t.selectLanguages} <span className="text-destructive">*</span>
               </label>
               
-              {/* Language Dropdown */}
+              {/* Tag input — one full value per Enter */}
+              <div
+                className={cn(
+                  'mb-3 flex min-h-[44px] flex-wrap items-center gap-2 rounded-lg border-2 border-border bg-card px-3 py-2',
+                  'focus-within:ring-2 focus-within:ring-primary',
+                )}
+              >
+                {formData.preferredLanguages.map((lang) => (
+                  <Badge
+                    key={lang}
+                    variant="secondary"
+                    className="flex items-center gap-1 text-xs"
+                  >
+                    {lang}
+                    <button
+                      type="button"
+                      aria-label={`Remove ${lang}`}
+                      onClick={() => removePreferredLanguage(lang)}
+                      className="rounded-full p-0.5 hover:bg-muted"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                <input
+                  type="text"
+                  value={languageDraft}
+                  onChange={(e) => setLanguageDraft(e.target.value)}
+                  onKeyDown={handleLanguageDraftKeyDown}
+                  placeholder={
+                    formData.preferredLanguages.length
+                      ? 'Add another language, press Enter'
+                      : 'e.g. Amharic — press Enter to add'
+                  }
+                  className="min-w-[140px] flex-1 border-0 bg-transparent text-xs sm:text-sm text-foreground outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+
+              {/* Preset language dropdown */}
               <div className="relative">
                 <button
                   type="button"
@@ -853,15 +943,9 @@ function ConsultationPageContent() {
                         type="button"
                         onClick={() => {
                           if (formData.preferredLanguages.includes(lang)) {
-                            setFormData(prev => ({
-                              ...prev,
-                              preferredLanguages: prev.preferredLanguages.filter(l => l !== lang)
-                            }))
+                            removePreferredLanguage(lang)
                           } else {
-                            setFormData(prev => ({
-                              ...prev,
-                              preferredLanguages: [...prev.preferredLanguages, lang]
-                            }))
+                            addPreferredLanguage(lang)
                           }
                         }}
                         className={`w-full px-3 sm:px-4 py-2.5 sm:py-3 text-left text-xs sm:text-sm flex items-center gap-2 sm:gap-3 hover:bg-primary/10 transition-colors border-b border-border/50 ${
@@ -886,49 +970,49 @@ function ConsultationPageContent() {
                     {/* Divider */}
                     <div className="border-b border-border/50" />
                     
-                    {/* Others Option */}
+                    {/* Others — custom language (one tag per Enter) */}
                     <div className="p-3 sm:p-4 border-b border-border/50">
                       <button
                         type="button"
-                        onClick={() => setCustomLanguage(customLanguage ? '' : 'true')}
-                        className={`w-full px-2 sm:px-3 py-2.5 sm:py-3 text-left text-xs sm:text-sm flex items-center gap-2 sm:gap-3 hover:bg-primary/10 transition-colors rounded-md ${
-                          customLanguage ? 'bg-primary/10 text-primary font-medium' : 'text-foreground'
-                        }`}
+                        onClick={() => {
+                          setOtherLanguageOpen((open) => {
+                            const next = !open
+                            if (next) setShowLanguageDropdown(true)
+                            return next
+                          })
+                        }}
+                        className={cn(
+                          'w-full px-2 sm:px-3 py-2.5 sm:py-3 text-left text-xs sm:text-sm flex items-center gap-2 sm:gap-3 hover:bg-primary/10 transition-colors rounded-md',
+                          otherLanguageOpen ? 'bg-primary/10 text-primary font-medium' : 'text-foreground',
+                        )}
                       >
                         <input
                           type="checkbox"
-                          checked={!!customLanguage}
+                          checked={otherLanguageOpen}
                           onChange={() => {}}
                           className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary flex-shrink-0"
                         />
-                        <span>Others (Type your language)</span>
-                        {customLanguage && (
+                        <span>Others (type your language)</span>
+                        {otherLanguageOpen && (
                           <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 ml-auto text-primary flex-shrink-0" />
                         )}
                       </button>
                       
                       {/* Custom Language Input */}
-                      {customLanguage && (
+                      {otherLanguageOpen && (
                         <div className="mt-2 sm:mt-3">
                           <input
                             type="text"
                             placeholder="Type language name..."
-                            value={customLanguage === 'true' ? '' : customLanguage}
-                            onChange={(e) => {
-                              const value = e.target.value
-                              setCustomLanguage(value)
-                              // Add to preferred languages if not empty
-                              if (value && !formData.preferredLanguages.includes(value)) {
-                                setFormData(prev => ({
-                                  ...prev,
-                                  preferredLanguages: [...prev.preferredLanguages, value]
-                                }))
-                              }
-                            }}
+                            value={languageDraft}
+                            onChange={(e) => setLanguageDraft(e.target.value)}
+                            onKeyDown={handleLanguageDraftKeyDown}
                             className="w-full px-2 sm:px-3 py-2 rounded-md border border-primary bg-primary/5 text-foreground text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                             autoFocus
                           />
-                          <p className="text-xs text-muted-foreground mt-1.5">Type a language name and press Enter or click away</p>
+                          <p className="text-xs text-muted-foreground mt-1.5">
+                            Press Enter to add the full name as one language (e.g. Amharic).
+                          </p>
                         </div>
                       )}
                     </div>
@@ -936,29 +1020,6 @@ function ConsultationPageContent() {
                 )}
               </div>
 
-              {/* Selected Languages Display */}
-              {formData.preferredLanguages.length > 0 && (
-                <div className="mt-4 p-3 sm:p-4 bg-green-50 dark:bg-green-900/10 border-2 border-green-200 dark:border-green-800 rounded-lg">
-                  <p className="text-xs sm:text-sm font-medium text-foreground mb-2.5">Selected Languages:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {formData.preferredLanguages.map((lang) => (
-                      <Badge key={lang} className="text-xs bg-green-600 text-white flex items-center gap-1.5">
-                        {lang}
-                        <button
-                          type="button"
-                          onClick={() => setFormData(prev => ({
-                            ...prev,
-                            preferredLanguages: prev.preferredLanguages.filter(l => l !== lang)
-                          }))}
-                          className="hover:text-green-200"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="flex flex-col gap-2 sm:gap-3 pt-2 sm:pt-4">
